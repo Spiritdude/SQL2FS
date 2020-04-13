@@ -6,7 +6,7 @@ my $APPNAME = "SQL2FS (sql2fs)";
 my $VERSION = "0.0.2";
 #
 # Description:
-#     ./sql2fs --db=<dbname>
+#     ./sql2fs <dbname>
 #     cd <dbname>
 #     ls
 #
@@ -32,8 +32,7 @@ my $ba2dbi = { pg => "Pg", mysql => "mysql", sqlite => "SQLite" };
 my $s2f = { v => 'verbose' };
 
 my $arg = {
-   backend => "pg",
-   db => "fs"
+   backend => "pg"
 };
 
 my $dbh;
@@ -51,12 +50,46 @@ foreach(@ARGV) {
 }
 @ARGV = @a;
 
-my $mount = $arg->{db};
-mkdir $mount;
-die "$!\n" unless(-d $mount);
+if(!defined $ba2dbi->{$arg->{backend}}) {
+   print "$APPNAME: ERR: backend '$arg->{backend}' not supported, only ".join(", ",map { "'$_'" } sort keys %$ba2dbi)."\n";
+   exit -1;
+}
 
-$SIG{INT} = sub {
-   print "WARN: sudo umount $mount/\n";
+if($arg->{help} || @ARGV!=1) {
+   print "USAGE $APPNAME $VERSION: [<options>] <database>
+   options:
+      --verbose            increase verbosity
+        -v or -vvvv           \"       \"
+      --backend=<db>       backend db type: ".join(", ",map { "'$_'" } sort keys %$ba2dbi)." (default: $arg->{backend})
+      --version            print version and exit
+
+   examples:
+      % sql2fs --backend=pg wikidata
+      % cd wikidata/
+      % ls 
+      
+      % sql2fs --backend=mysql wordpress
+      % cd wordpress/
+      % ls
+      % killall sql2fs; sudo umount wordpress/
+
+";
+   exit 0;
+}
+
+if($arg->{version}) {
+   print "$APPNAME $VERSION\n";
+   exit 0;
+}
+
+my $mount = $arg->{db} = shift(@ARGV);    # -- database becomes mount point
+
+mkdir $mount;
+
+die "$APPNAME: $!\n" unless(-d $mount);
+
+$SIG{__DIE__} = sub {
+   print "$APPNAME: HINT: sudo umount $mount/\n";
    exit -1;
 };
 
@@ -70,7 +103,7 @@ Fuse::main(
    read => \&my_read, 
    release => \&my_close,
    utime => sub { return 0 },
-   mountopts => "allow_other",
+   mountopts => $arg->{allow_other} ? "allow_other":"",
    threaded => 0
 );
 
@@ -207,24 +240,36 @@ sub my_getdir {
    
    my @d;
 
-   push(@d,'.','..');
+   push(@d,'.','..');      # -- must be there at all times - we are in UNIX world
 
    my(@p) = split(/\//,$path);
 
    if(@p==0) {     # /
-      @d = sql("select * from pg_catalog.pg_tables where schemaname != 'pg_catalog' and schemaname != 'information_schema'");
+      if($arg->{backend}eq'mysql') {
+         @d = sql("show tables");
+         @d = map { $_->{"Tables_in_$arg->{db}"} } @d;
+      } else {
+         @d = sql("select * from pg_catalog.pg_tables where schemaname != 'pg_catalog' and schemaname != 'information_schema'");
+         @d = map { $_->{tablename} } @d;
+      }
       print to_json(\@d,{pretty=>1,canonical=>1}) if($arg->{verbose}>3);
-      @d = sort map { encode('utf-8',$_->{tablename}) } @d;
+      @d = sort map { encode('utf-8',$_) } @d;
 
    } elsif(@p==1) {          
-      #@d = sql("select * from $p[0] where false");      # -- won't work
-      @d = sql("select * from information_schema.columns where table_name = ?",$p[0]);
-      @d = sort map { encode('utf-8',$_->{column_name}) } @d;
+      if($arg->{backend}eq'mysql') {
+         @d = sql("show columns from $p[0]");
+         @d = map { $_->{Field} } @d;
+      } else {
+         @d = sql("select * from information_schema.columns where table_name = ?",$p[0]);
+         @d = map { $_->{column_name} } @d;
+      }
+      @d = sort map { encode('utf-8',$_) } @d;
       print to_json(\@d,{pretty=>1,canonical=>1}) if($arg->{verbose}>3);
       #push(@d,sort keys %{$d[0]});
 
    } elsif(@p==2) {     # /<table>/<col>/<val>
       @d = sql("select distinct $p[1] from $p[0]");
+      #@d = sql("select distinct ? from ?",$p[1],$p[0]);    # -- would be safe ... but doesn't work ... (SQL sucks)
       @d = sort map { encode('utf-8',$_->{$p[1]}) } @d;
       print to_json(\@d,{pretty=>1,canonical=>1}) if($arg->{verbose}>3);
 

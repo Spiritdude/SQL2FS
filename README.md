@@ -1,6 +1,43 @@
 # SQL2FS
 
-Mapping (Postgre)SQL to a filesystem . . . because it's possible.
+Mapping (Postgre)SQL to a filesystem . . . because it's possible, and because it's how it should work.
+```
+% sql2fs --backend=mysql my_database
+% cd my_database/
+% ls
+table1/     table2/     table3/
+% cd table1/
+% ls
+column1/    column2/  ...
+% cd column1/
+% ls
+val1    val2    val3/   val4   val5    val6/ 
+% more val1
+{
+   "column1": "val1",
+   "column2": "some value",
+   ...
+}
+% cd val3/
+% ls
+0   1   2   3 
+% more 0
+{
+   "column1": "val3",
+   "column2": "some other value",
+   ...
+}
+% more 1
+{
+   "column1": "val3",
+   "column2": "something else",
+   ...
+}
+```
+
+## Limitations
+- highly experimental (unstable)
+- read only
 
 ## Download
 ```
@@ -15,69 +52,79 @@ Mapping (Postgre)SQL to a filesystem . . . because it's possible.
 
 ## Use 
 ```
-% ./sql2fs --db=<database>
-% cd <database>
+% createdb test
+% psql test
+> create table table1 (a int, b int, c varchar);
+> insert into table1 (a,b,c) values(1,2,"test");
+> insert into table1 (a,b,c) values(2,13,"test2");
+> insert into table1 (a,b,c) values(2,3,"test3");
+> insert into table1 (a,b,c) values(3,4,"test4");
+> \q
+
+% ./sql2fs test
+
+% cd test/
+
 % ls
-table1/   table2/    table3/
+table1/
 
 % cd table1/
 
 % ls
-col1/     col2/      col3/    col4/ 
+a/     b/     c/
 
-% cd col3/
+% cd a/
 
 % ls
-val1      val2       val3     val4    ...
-val16/    val17      val18/
-...       ..
-# -- note that some are files and some are directories
+1      2/     3
+// note: some are files and some are directories
 
-% more val1
+% more 1
 {
    "a": 1,
-   "b": 334,
-   "c": "some text",
-   "col3": "val1"
+   "b": 2,
+   "c": "test",
 }
 
-% more val1#a
-1
+// note: once you reached record level, you can access the column with adding '#column' to the filename:
+% more 1#b
+2
 
-% more val1#c
-some text
+% more 1#c
+test
 
-# -- note: some values might not be unique, therefore you can 'cd' into them, and see entries like 0 1 2 ...
-% cd val16/
+// note: some values might not be unique, therefore you can 'cd' into them, and see entries like 0 1 2 ...
+% cd 2/
 
 % ls 
-0    1    2    3    4
+0      1
 
 % pwd
-.../table1/col3/val16
+test/table1/a/2
 
 % more 0
 { 
-   "a": 1,
-   "b": 8375,
-   "c": "something",
-   "col3": "val16",
+   "a": 2,
+   "b": 13,
+   "c": "test3"
 }
 
 % more 1
 { 
-   "a": 211,
-   "b": 877266,
-   "c": "another text",
-   "col3": "val16",
+   "a": 2,
+   "b": 3,
+   "c": "test4"
 }
+
+% more 1#c
+test4
 
 ```
 
 ## Exit & Unmount
 ```
 % killall sql2fs
-% sudo umount <database>/
+% sudo umount test/
 ```
 
 ## Extended Use
@@ -88,5 +135,4 @@ user_allow_other
 ```
 
 so other users, like a web-server (lighttpd/apache/nginx) can access those mounted database/directories as well.
-
 
