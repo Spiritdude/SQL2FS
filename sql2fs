@@ -3,7 +3,7 @@
 # == SQL 2 Filesystem Abstraction, written by Rene K. Mueller <spiritdude@gmail.com>
 #
 my $APPNAME = "SQL2FS (sql2fs)";
-my $VERSION = "0.0.1";
+my $VERSION = "0.0.2";
 #
 # Description:
 #     ./sql2fs --db=<dbname>
@@ -11,6 +11,7 @@ my $VERSION = "0.0.1";
 #     ls
 #
 # History:
+# 2020/04/13: 0.0.2: allowing <table>/<col>/<val>#<col> solely, better utf-8 support
 # 2020/04/13: 0.0.1: basic functionality works, items return JSON, only PostgreSQL supported
 
 use DBI;
@@ -20,7 +21,11 @@ use DBD::SQLite;
 use Fuse;
 use POSIX qw(ENOENT EISDIR EINVAL O_WRONLY);
 use JSON;
+use Encode;
+
 use strict;
+use utf8;
+use open qw(:std :utf8);
 
 my $ba2dbi = { pg => "Pg", mysql => "mysql", sqlite => "SQLite" };
 
@@ -32,6 +37,7 @@ my $arg = {
 };
 
 my $dbh;
+my $st_time = time();
 
 my @a;
 foreach(@ARGV) {
@@ -64,6 +70,7 @@ Fuse::main(
    read => \&my_read, 
    release => \&my_close,
    utime => sub { return 0 },
+   mountopts => "allow_other",
    threaded => 0
 );
 
@@ -88,9 +95,29 @@ sub my_read {
    $path =~ s#/##;
    my(@p) = split(/\//,$path);
    if(@p==3) {
+      my $f; $f = $1 if($p[2]=~s/#(\w+)$//);
       my $c = sql("select * from $p[0] where $p[1] = ?",$p[2]);
-      my $e = to_json($c,{pretty=>1,canonical=>1});
-      return substr($e,$off,$n);
+      my $e;
+      if($f) {
+         $e = encode('utf-8',$c->{$f});
+      } else {
+         $e = encode('utf-8',to_json($c,{pretty=>1,canonical=>1}));        # -- we need true byte stream
+      }
+      $e = substr($e,$off,$n);
+      return $e;
+
+   } if(@p==4) {     # /<table>/<col>/<val>/<n>
+      my $f; $f = $1 if($p[3]=~s/#(\w+)$//);
+      my(@c) = sql("select * from $p[0] where $p[1] = ? offset ? limit 1",$p[2],$p[3]);
+      return 1 if(@c==0||!$c[0]);
+      my $e;
+      if($f) {
+         $e = encode('utf-8',$c[0]->{$f});
+      } else {
+         $e = encode('utf-8',to_json($c[0],{pretty=>1,canonical=>1}));        # -- we need true byte stream
+      }
+      $e = substr($e,$off,$n);
+      return $e;
    }
    return -1;
 }
@@ -98,21 +125,24 @@ sub my_read {
 sub my_getattr {
    my($path) = @_;
    print "INF: getattr($path)\n" if($arg->{verbose});
+
    $path =~ s#/##;
+   $path = decode('utf-8',$path);
+
    my(@p) = split(/\//,$path);
 
    print "INF: path: ",join(",",map { "\"$_\"" } @p),"\n" if($arg->{verbose}>1);
 
-   my $context = Fuse::fuse_get_context();
    my($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size, $atime, $mtime, $ctime, $blksize, $blocks) = stat(".");
 
    # ($dev, $ino, $rdev, $blocks, $nlink, $blksize ) = ( 0, 0, 0, 1, 1, 1024 );
 
+   my $context = Fuse::fuse_get_context();
    my $type = 0040;           # -- dir
    my $perm = 0777;
    $size = 0;
 
-   if($p[$#p]=~/^\.\.?$/) {   # . and .. are valid always
+   if($p[$#p]=~/^\.{1,2}?$/) {   # . and .. are valid always
       ;
    } elsif(@p<=0) {           # /
       ;
@@ -127,14 +157,41 @@ sub my_getattr {
       #return ( -ENOENT() ) if(!$c);
       
    } elsif(@p==3) {           # /table/column/value/<v>
-      my $c = sql("select * from $p[0] where $p[1] = ?",$p[2]);
-      return ( -ENOENT() ) if(!$c);
-      my $e = to_json($c,{pretty=>1,canonical=>1});
+      return ( -ENOENT() ) if($p[0]=~/^\.\w+/);
+      my $f; $f = $1 if($p[2]=~s/#(\w+)$//);
+      my(@c) = sql("select * from $p[0] where $p[1] = ?",$p[2]);
+      return ( -ENOENT() ) if(@c==0);
+      if(@c==1) {
+         my $e;
+         if($f) {
+            $e = encode('utf-8',$c[0]->{$f});
+         } else {
+            $e = encode('utf-8',to_json($c[0],{pretty=>1,canonical=>1}));
+         }
+         $size = length($e);
+         $type = 0100;           # -- file
+      } else {
+         ;                       # -- more values (dir)
+      }
+
+   } elsif(@p==4) {           # /table/column/value/<v>/<n>
+      return ( -ENOENT() ) if($p[0]=~/^\.\w+/);
+      my $f; $f = $1 if($p[3]=~s/#(\w+)$//);
+      my(@c) = sql("select * from $p[0] where $p[1] = ? offset ? limit 1",$p[2],$p[3]);
+      return ( -ENOENT() ) if(@c==0||!$c[0]);
+      my $e;
+      if($f) {
+         $e = encode('utf-8',$c[0]->{$f});
+      } else {
+         $e = encode('utf-8',to_json($c[0],{pretty=>1,canonical=>1}));
+      }
       $size = length($e);
       $type = 0100;           # -- file
    }
+
    print "type: $type\n" if($arg->{verbose}>2);
-   $atime = $mtime = $ctime = time();
+   $atime = time();
+   $mtime = $ctime = $st_time;
    $mode = ($type << 9) + $perm;
    $uid = $context->{uid};
    $gid = $context->{gid};
@@ -157,22 +214,24 @@ sub my_getdir {
    if(@p==0) {     # /
       @d = sql("select * from pg_catalog.pg_tables where schemaname != 'pg_catalog' and schemaname != 'information_schema'");
       print to_json(\@d,{pretty=>1,canonical=>1}) if($arg->{verbose}>3);
-      @d = map { $_->{tablename} } @d;
+      @d = sort map { encode('utf-8',$_->{tablename}) } @d;
 
    } elsif(@p==1) {          
       #@d = sql("select * from $p[0] where false");      # -- won't work
       @d = sql("select * from information_schema.columns where table_name = ?",$p[0]);
-      @d = map { $_->{column_name} } @d;
+      @d = sort map { encode('utf-8',$_->{column_name}) } @d;
       print to_json(\@d,{pretty=>1,canonical=>1}) if($arg->{verbose}>3);
       #push(@d,sort keys %{$d[0]});
 
    } elsif(@p==2) {     # /<table>/<col>/<val>
       @d = sql("select distinct $p[1] from $p[0]");
-      @d = map { $_->{$p[1]} } @d;
+      @d = sort map { encode('utf-8',$_->{$p[1]}) } @d;
       print to_json(\@d,{pretty=>1,canonical=>1}) if($arg->{verbose}>3);
 
    } elsif(@p==3) {     # /<table>/<col>/<val>/<id>
       @d = sql("select * from $p[0] where $p[1] = ?",$p[2]);
+      my $n = 0;
+      @d = map { $n++; } @d;
       print to_json(\@d,{pretty=>1,canonical=>1}) if($arg->{verbose}>3);
    }
    push(@d,0);
