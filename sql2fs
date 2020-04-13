@@ -1,0 +1,213 @@
+#!/usr/bin/perl
+
+# == SQL 2 Filesystem Abstraction, written by Rene K. Mueller <spiritdude@gmail.com>
+#
+my $APPNAME = "SQL2FS (sql2fs)";
+my $VERSION = "0.0.1";
+#
+# Description:
+#     ./sql2fs --db=<dbname>
+#     cd <dbname>
+#     ls
+#
+# History:
+# 2020/04/13: 0.0.1: basic functionality works, items return JSON, only PostgreSQL supported
+
+use DBI;
+use DBD::Pg;
+use DBD::mysql;
+use DBD::SQLite;
+use Fuse;
+use POSIX qw(ENOENT EISDIR EINVAL O_WRONLY);
+use JSON;
+use strict;
+
+my $ba2dbi = { pg => "Pg", mysql => "mysql", sqlite => "SQLite" };
+
+my $s2f = { v => 'verbose' };
+
+my $arg = {
+   backend => "pg",
+   db => "fs"
+};
+
+my $dbh;
+
+my @a;
+foreach(@ARGV) {
+   if(/^-(\w+)$/) {
+      $arg->{$s2f->{$_}}++ foreach(split(/|/,$1));
+      next;
+   }
+   $arg->{$1}++, next if(/^--(\w+)$/);
+   $arg->{$1} = $2, next if(/^--(\w+)=(.*)$/);
+   push(@a,$_);
+}
+@ARGV = @a;
+
+my $mount = $arg->{db};
+mkdir $mount;
+die "$!\n" unless(-d $mount);
+
+$SIG{INT} = sub {
+   print "WARN: sudo umount $mount/\n";
+   exit -1;
+};
+
+fork && exit;
+
+Fuse::main( 
+   mountpoint => $mount, 
+   getattr => \&my_getattr,
+   getdir => \&my_getdir,
+   open => \&my_open, 
+   read => \&my_read, 
+   release => \&my_close,
+   utime => sub { return 0 },
+   threaded => 0
+);
+
+sub my_open {
+   my($path,$mode) = @_;
+   print "INF: open($path)\n" if($arg->{verbose});
+   $path =~ s#/##;
+   my $fh;
+   return 0,$fh;
+}
+
+sub my_close {
+   my($path,$flags,$fh) = @_;
+   print "INF: close($path)\n" if($arg->{verbose});
+   $path =~ s#/##;
+   return 0;
+}
+
+sub my_read {
+   my($path,$n,$off,$fh) = @_;
+   print "INF: read($path,$n,$off)\n" if($arg->{verbose});
+   $path =~ s#/##;
+   my(@p) = split(/\//,$path);
+   if(@p==3) {
+      my $c = sql("select * from $p[0] where $p[1] = ?",$p[2]);
+      my $e = to_json($c,{pretty=>1,canonical=>1});
+      return substr($e,$off,$n);
+   }
+   return -1;
+}
+
+sub my_getattr {
+   my($path) = @_;
+   print "INF: getattr($path)\n" if($arg->{verbose});
+   $path =~ s#/##;
+   my(@p) = split(/\//,$path);
+
+   print "INF: path: ",join(",",map { "\"$_\"" } @p),"\n" if($arg->{verbose}>1);
+
+   my $context = Fuse::fuse_get_context();
+   my($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size, $atime, $mtime, $ctime, $blksize, $blocks) = stat(".");
+
+   # ($dev, $ino, $rdev, $blocks, $nlink, $blksize ) = ( 0, 0, 0, 1, 1, 1024 );
+
+   my $type = 0040;           # -- dir
+   my $perm = 0777;
+   $size = 0;
+
+   if($p[$#p]=~/^\.\.?$/) {   # . and .. are valid always
+      ;
+   } elsif(@p<=0) {           # /
+      ;
+   } elsif(@p==1) {           # /table/
+      return ( -ENOENT() ) if($p[0]=~/^\.\w+/);
+      #my $c = sql("select * from $p[0]");
+      #return ( -ENOENT() ) if(!$c);
+      
+   } elsif(@p==2) {           # /table/column/
+      return ( -ENOENT() ) if($p[0]=~/^\.\w+/);
+      #my $c = sql("select * from $p[0]");
+      #return ( -ENOENT() ) if(!$c);
+      
+   } elsif(@p==3) {           # /table/column/value/<v>
+      my $c = sql("select * from $p[0] where $p[1] = ?",$p[2]);
+      return ( -ENOENT() ) if(!$c);
+      my $e = to_json($c,{pretty=>1,canonical=>1});
+      $size = length($e);
+      $type = 0100;           # -- file
+   }
+   print "type: $type\n" if($arg->{verbose}>2);
+   $atime = $mtime = $ctime = time();
+   $mode = ($type << 9) + $perm;
+   $uid = $context->{uid};
+   $gid = $context->{gid};
+   print "valid file: ",
+      join(",", $dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size, $atime, $mtime, $ctime, $blksize, $blocks ),"\n" if($arg->{verbose}>3);
+   return ( $dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size, $atime, $mtime, $ctime, $blksize, $blocks );
+}
+
+sub my_getdir {
+   my($path) = @_;
+   print "INF: getdir($path)\n" if($arg->{verbose});
+   $path =~ s#/##;
+   
+   my @d;
+
+   push(@d,'.','..');
+
+   my(@p) = split(/\//,$path);
+
+   if(@p==0) {     # /
+      @d = sql("select * from pg_catalog.pg_tables where schemaname != 'pg_catalog' and schemaname != 'information_schema'");
+      print to_json(\@d,{pretty=>1,canonical=>1}) if($arg->{verbose}>3);
+      @d = map { $_->{tablename} } @d;
+
+   } elsif(@p==1) {          
+      #@d = sql("select * from $p[0] where false");      # -- won't work
+      @d = sql("select * from information_schema.columns where table_name = ?",$p[0]);
+      @d = map { $_->{column_name} } @d;
+      print to_json(\@d,{pretty=>1,canonical=>1}) if($arg->{verbose}>3);
+      #push(@d,sort keys %{$d[0]});
+
+   } elsif(@p==2) {     # /<table>/<col>/<val>
+      @d = sql("select distinct $p[1] from $p[0]");
+      @d = map { $_->{$p[1]} } @d;
+      print to_json(\@d,{pretty=>1,canonical=>1}) if($arg->{verbose}>3);
+
+   } elsif(@p==3) {     # /<table>/<col>/<val>/<id>
+      @d = sql("select * from $p[0] where $p[1] = ?",$p[2]);
+      print to_json(\@d,{pretty=>1,canonical=>1}) if($arg->{verbose}>3);
+   }
+   push(@d,0);
+   return @d;
+}
+
+sub sql {
+   my($sql) = shift;
+   my @a = @_;
+   my $opts = ref(@a[$#a])eq'HASH'?pop(@a):{};
+
+   unless($dbh) {
+      $dbh = DBI->connect("dbi:$ba2dbi->{$arg->{backend}}:dbname=".$arg->{db});
+   }
+
+   print "INF: sql \"$sql\" ".join(" ",map {"\"$_\""} @a)."\n" if($arg->{verbose}>1);
+   my $sth = $dbh->prepare($sql);
+   my $s = $sth->execute(@a);
+   my @r;
+
+   print STDERR "SQL ERR ".$dbh->errstr()."\n" if($dbh->errstr());
+   if(defined $opts->{results} && $opts->{results}==0) {
+      $sth->{finish};
+      return;
+   } else {
+      while(my $e = $sth->fetchrow_hashref()) {
+         if(ref($opts->{callback})eq'CODE') {
+            &{$opts->{callback}}($e);
+         } else {
+            push(@r,$e);
+         }
+      }
+   }
+   print "INF:   ".scalar @r." results, returning ".(wantarray ? "array":"scalar")."\n" if($arg->{verbose}>1);
+   $sth->{finish};
+   return wantarray ? @r : $r[0];
+}
+
