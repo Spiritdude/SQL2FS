@@ -1,6 +1,6 @@
-# SQL2FS
+# SQL2FS - Mapping SQL as a File System
 
-Mapping SQL (PostgreSQL & MySQL) to a filesystem . . . because it's possible, and because it's how it should work.
+Mapping SQL (PostgreSQL, MySQL, SQLite) to a file system . . . because it's possible, and because it's how it should be done.
 ```
 % sql2fs --backend=mysql my_database
 % cd my_database/
@@ -8,7 +8,7 @@ Mapping SQL (PostgreSQL & MySQL) to a filesystem . . . because it's possible, an
 table1/     table2/     table3/
 % cd table1/
 % ls
-column1/    column2/  ...
+column1/    column2/    ...
 % cd column1/
 % ls
 val1    val2    val3/   val4   val5    val6/ 
@@ -36,15 +36,17 @@ val1    val2    val3/   val4   val5    val6/
 ```
 
 ## Limitations
-- highly experimental (highly unstable)
-- barely any sanity checkings
-- read only
+- UNIX only: Debian/Ubuntu 18.04/LTS
+- highly experimental (unstable)
+- barely any sanity checkings (insecure, easy to tamper and alter database/tables/etc)
+- read only (see next "Todo / Ideas")
 
 ## Todo / Ideas
-- create new tables, e.g. `echo "a int, comment varchar" > new_table/.schema`
-- insert data into tables, e.g. `echo 'a=2 comment="testing something"' >> new_table/.tail`
-- remove data, e.g. `rm table/a/1` => deletes records `where a = 1`
-- etc
+- proper "write" support:
+  - create new tables, e.g. `echo "a int, comment varchar" > new_table/.schema`
+  - insert data into tables, e.g. `echo 'a=2 comment="testing something"' >> new_table/.tail`
+  - remove data, e.g. `rm table/a/1` => deletes records `where a = 1`
+  - etc
 
 ## Download
 ```
@@ -53,6 +55,8 @@ val1    val2    val3/   val4   val5    val6/
 ```
 
 ## Install
+
+On Debian/Ubuntu:
 ```
 % sudo make requirements
 % make install

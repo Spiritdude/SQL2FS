@@ -5,8 +5,8 @@ all::
 	@echo "make install deinstall edit backup git change push pull"
 
 requirements::
-	sudo apt -y install libfuse-dev 
-	sudo cpan JSON DBI DBD::mysql DBD::Pg DBD::SQLite
+	sudo apt -y install libfuse-dev libpq-dev libdbd-mysql-perl libdbd-sqlite3-perl
+	sudo cpan Fuse JSON DBI DBD::Pg
 
 install::
 	cp sql2fs ~/bin/
