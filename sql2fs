@@ -4,7 +4,7 @@
 #  written by Rene K. Mueller <spiritdude@gmail.com>
 #
 my $APPNAME = "SQL2FS (sql2fs)";
-my $VERSION = "0.0.3";
+my $VERSION = "0.0.4";
 #
 # License: MIT, Copyright 2020 by Rene K. Mueller (see LICENSE file)
 #
@@ -14,6 +14,7 @@ my $VERSION = "0.0.3";
 #     ls
 #
 # History:
+# 2020/04/14: 0.0.4: adding sqlite support
 # 2020/04/13: 0.0.3: adding mysql support, better usage/help output
 # 2020/04/13: 0.0.2: allowing <table>/<col>/<val>#<col> solely, better utf-8 support
 # 2020/04/13: 0.0.1: basic functionality works, items return JSON, only PostgreSQL supported
@@ -77,8 +78,13 @@ if($arg->{help} || @ARGV!=1) {
       % sql2fs --backend=mysql wordpress
       % cd wordpress/
       % ls
-      % killall sql2fs; sudo umount wordpress/
+      % cd ..; killall sql2fs; sudo umount wordpress/
+      
+      % sql2fs --backend=sqlite test.db
+      % cd test/
 
+   see also https://github.com/Spiritdude/SQL2FS for more information
+   
 ";
    exit 0;
 }
@@ -89,6 +95,8 @@ if($arg->{version}) {
 }
 
 my $mount = $arg->{db} = shift(@ARGV);    # -- database becomes mount point
+
+$mount =~ s/.+\///, $mount =~ s/\.\w+$// if($arg->{backend}eq'sqlite');    # -- remove path and extension if sqlite (e.g. /../../test.db)
 
 mkdir $mount;
 
@@ -190,6 +198,8 @@ sub my_getattr {
       my $c;
       if($arg->{backend}eq'mysql') {
          $c = sql("select * from information_schema.tables where table_schema = ? and table_name = ?",$arg->{db},$p[0]);
+      } elsif($arg->{backend}eq'sqlite') {
+         $c = sql("select * from sqlite_master where type = 'table' and name = ?",$p[0]);
       } else {
          $c = sql("select * from information_schema.tables where table_name = ?",$p[0]);
       }
@@ -198,7 +208,12 @@ sub my_getattr {
    } elsif(@p==2) {           # /table/column/
       return ( -ENOENT() ) if($p[0]=~/^\.\w+/);
       # my $c = sql("select $p[1] from $p[0] limit 1");
-      my $c = sql("select distinct column_name from information_schema.columns where table_name = ? and column_name = ?",$p[0],$p[1]);
+      my $c;
+      if($arg->{backend}eq'sqlite') {
+         $c = sql("select $p[1] from $p[0] limit 1");
+      } else {
+         $c = sql("select distinct column_name from information_schema.columns where table_name = ? and column_name = ?",$p[0],$p[1]);
+      }
       return ( -ENOENT() ) if(!$c);
       
    } elsif(@p==3) {           # /table/column/value/<v>
@@ -261,6 +276,8 @@ sub my_getdir {
          # @d = sql("show tables");
          # @d = map { $_->{"Tables_in_".$arg->{db}} } @d;
          @d = sql("select table_name from information_schema.tables where table_schema = ?",$arg->{db});
+      } elsif($arg->{backend}eq'sqlite') {
+         @d = sql("select name as table_name from sqlite_master where type = 'table' and name not like 'sqlite_%'");
       } else {
          # @d = sql("select * from pg_catalog.pg_tables where schemaname != 'pg_catalog' and schemaname != 'information_schema'");
          # @d = map { $_->{tablename} } @d;
@@ -270,7 +287,15 @@ sub my_getdir {
       @d = sort map { encode('utf-8',$_->{table_name}) } @d;
 
    } elsif(@p==1) {          
-      @d = sql("select distinct column_name from information_schema.columns where table_name = ?",$p[0]);
+      if($arg->{backend}eq'sqlite') {
+         my $c = sql("select sql from sqlite_master where type = 'table' and name = ?",$p[0]);
+         if($c && $c->{sql} =~ /\(([^\)]+)\)/) {      # -- no other way than parsing output "create table (....)"
+            my(@c) = split(/,\s?/,$1);                
+            @d = map { s/\s.*$//; my $e = $_; $_ = {}; $_->{column_name} = $e; $_ } @c;
+         }
+      } else {
+         @d = sql("select distinct column_name from information_schema.columns where table_name = ?",$p[0]);
+      }
       @d = sort map { encode('utf-8',$_->{column_name}) } @d;
       print to_json(\@d,{pretty=>1,canonical=>1}) if($arg->{verbose}>3);
 
