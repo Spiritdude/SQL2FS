@@ -2,9 +2,12 @@
 
 # == SQL 2 Filesystem Abstraction == 
 #    written by Rene K. Mueller <spiritdude@gmail.com>
+#    aka "because fs everything"
 #
 my $APPNAME = "SQL2FS (sql2fs)";
 my $VERSION = "0.0.3";
+#
+# License: MIT, Copyright 2020 by Rene K. Mueller (see LICENSE file)
 #
 # Description:
 #     ./sql2fs <dbname>
@@ -34,7 +37,8 @@ my $ba2dbi = { pg => "Pg", mysql => "mysql", sqlite => "SQLite" };
 my $s2f = { v => 'verbose' };
 
 my $arg = {
-   backend => "pg"
+   backend => "pg",
+   verbose => 0
 };
 
 my $dbh;
@@ -64,6 +68,7 @@ if($arg->{help} || @ARGV!=1) {
         -v or -vvvv           \"       \"
       --backend=<db>       backend db type: ".join(", ",map { "'$_'" } sort keys %$ba2dbi)." (default: $arg->{backend})
       --version            print version and exit
+      --allow_other        permit other users to use mount (add 'user_allow_other' in /etc/fuse.conf)
 
    examples:
       % sql2fs --backend=pg wikidata
@@ -168,9 +173,9 @@ sub my_getattr {
 
    print "INF: path: ",join(",",map { "\"$_\"" } @p),"\n" if($arg->{verbose}>1);
 
-   my($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size, $atime, $mtime, $ctime, $blksize, $blocks) = stat(".");
+   my($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size, $atime, $mtime, $ctime, $blksize, $blocks); # = stat(".");
 
-   # ($dev, $ino, $rdev, $blocks, $nlink, $blksize ) = ( 0, 0, 0, 1, 1, 1024 );
+   ($dev, $ino, $rdev, $blocks, $nlink, $blksize ) = ( 0, 0, 0, 1, 1, 1024 );
 
    my $context = Fuse::fuse_get_context();
    my $type = 0040;           # -- dir
@@ -238,7 +243,7 @@ sub my_getattr {
    $gid = $context->{gid};
    print "valid file: ",
       join(",", $dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size, $atime, $mtime, $ctime, $blksize, $blocks ),"\n" if($arg->{verbose}>3);
-   return ( $dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size, $atime, $mtime, $ctime, $blksize, $blocks );
+   return ($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size, $atime, $mtime, $ctime, $blksize, $blocks);
 }
 
 sub my_getdir {

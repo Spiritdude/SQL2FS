@@ -1,6 +1,6 @@
 # SQL2FS
 
-Mapping (Postgre)SQL to a filesystem . . . because it's possible, and because it's how it should work.
+Mapping SQL (PostgreSQL & MySQL) to a filesystem . . . because it's possible, and because it's how it should work.
 ```
 % sql2fs --backend=mysql my_database
 % cd my_database/
@@ -36,9 +36,15 @@ val1    val2    val3/   val4   val5    val6/
 ```
 
 ## Limitations
-- highly experimental (unstable)
-- no sanity checkings (one can `cd` into non existing columns)
+- highly experimental (highly unstable)
+- barely any sanity checkings
 - read only
+
+## Todo / Ideas
+- create new tables, e.g. `echo "a int, comment varchar" > new_table/.schema`
+- insert data into tables, e.g. `echo 'a=2 comment="testing something"' >> new_table/.tail`
+- remove data, e.g. `rm table/a/1` => deletes records `where a = 1`
+- etc
 
 ## Download
 ```
@@ -49,7 +55,9 @@ val1    val2    val3/   val4   val5    val6/
 ## Install
 ```
 % sudo make requirements
+% make install
 ```
+Note: it just installs `sql2fs` to your local `~/bin/`.
 
 ## Use 
 ```

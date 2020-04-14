@@ -1,5 +1,5 @@
 NAME=SQL2FS
-VERSION=0.0.2
+VERSION=0.0.3
 
 all::
 	@echo "make install deinstall edit backup git change push pull"
@@ -9,8 +9,10 @@ requirements::
 	sudo cpan JSON DBI DBD::mysql DBD::Pg DBD::SQLite
 
 install::
+	cp sql2fs ~/bin/
 
 deinstall::
+	rm -f sql2fs ~/bin/
 
 backup::
 	cd ..; tar cfvz ~/Backup/${NAME}-${VERSION}.tar.gz ${NAME}; scp ~/Backup/${NAME}-${VERSION}.tar.gz backup:Backup;
