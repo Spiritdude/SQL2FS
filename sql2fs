@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 
-# == SQL 2 Filesystem Abstraction, written by Rene K. Mueller <spiritdude@gmail.com>
+# == SQL 2 Filesystem Abstraction == 
+#    written by Rene K. Mueller <spiritdude@gmail.com>
 #
 my $APPNAME = "SQL2FS (sql2fs)";
 my $VERSION = "0.0.3";
@@ -89,12 +90,12 @@ mkdir $mount;
 
 die "$APPNAME: $!\n" unless(-d $mount);
 
+fork && exit;
+
 $SIG{__DIE__} = sub {
    print "$APPNAME: HINT: sudo umount $mount/\n";
    exit -1;
 };
-
-fork && exit;
 
 Fuse::main( 
    mountpoint => $mount, 
@@ -141,8 +142,8 @@ sub my_read {
       return $e;
 
    } if(@p==4) {     # /<table>/<col>/<val>/<n>
-      my $f; $f = $1 if($p[3]=~s/#(\w+)$//);
-      my(@c) = sql("select * from $p[0] where $p[1] = ? offset ? limit 1",$p[2],$p[3]);
+      my $f; $f = $1 if($p[3]=~s/#(\w+)$//);   
+      my(@c) = sql("select * from $p[0] where $p[1] = ? limit 1 offset $p[3]",$p[2]);   # -- .. offset ?",$p[3]*1) won't work with mysql, but works with pg
       return 1 if(@c==0||!$c[0]);
       my $e;
       if($f) {
@@ -182,12 +183,17 @@ sub my_getattr {
       ;
    } elsif(@p==1) {           # /table/
       return ( -ENOENT() ) if($p[0]=~/^\.\w+/);
-      #my $c = sql("select * from $p[0]");
-      #return ( -ENOENT() ) if(!$c);
+      my $c;
+      if($arg->{backend}eq'mysql') {
+         $c = sql("select * from information_schema.tables where table_schema = ? and table_name = ?",$arg->{db},$p[0]);
+      } else {
+         $c = sql("select * from information_schema.tables where table_name = ?",$p[0]);
+      }
+      return ( -ENOENT() ) if(!$c);
       
    } elsif(@p==2) {           # /table/column/
       return ( -ENOENT() ) if($p[0]=~/^\.\w+/);
-      #my $c = sql("select * from $p[0]");
+      #my $c = sql("select $p[1] from $p[0] limit 1");
       #return ( -ENOENT() ) if(!$c);
       
    } elsif(@p==3) {           # /table/column/value/<v>
@@ -208,10 +214,10 @@ sub my_getattr {
          ;                       # -- more values (dir)
       }
 
-   } elsif(@p==4) {           # /table/column/value/<v>/<n>
+   } elsif(@p==4) {              # /table/column/value/<v>/<n>
       return ( -ENOENT() ) if($p[0]=~/^\.\w+/);
       my $f; $f = $1 if($p[3]=~s/#(\w+)$//);
-      my(@c) = sql("select * from $p[0] where $p[1] = ? offset ? limit 1",$p[2],$p[3]);
+      my(@c) = sql("select * from $p[0] where $p[1] = ? limit 1 offset $p[3]",$p[2]);      # -- .. offset ?",$p[3]*1) won't work with mysql, but works with pg
       return ( -ENOENT() ) if(@c==0||!$c[0]);
       my $e;
       if($f) {
@@ -247,30 +253,25 @@ sub my_getdir {
 
    if(@p==0) {     # /
       if($arg->{backend}eq'mysql') {
-         @d = sql("show tables");
-         @d = map { $_->{"Tables_in_$arg->{db}"} } @d;
+         # @d = sql("show tables");
+         # @d = map { $_->{"Tables_in_".$arg->{db}} } @d;
+         @d = sql("select table_name from information_schema.tables where table_schema = ?",$arg->{db});
       } else {
-         @d = sql("select * from pg_catalog.pg_tables where schemaname != 'pg_catalog' and schemaname != 'information_schema'");
-         @d = map { $_->{tablename} } @d;
+         # @d = sql("select * from pg_catalog.pg_tables where schemaname != 'pg_catalog' and schemaname != 'information_schema'");
+         # @d = map { $_->{tablename} } @d;
+         @d = sql("select table_name from information_schema.tables where table_schema != 'pg_catalog' and table_schema != 'information_schema'");
       }
       print to_json(\@d,{pretty=>1,canonical=>1}) if($arg->{verbose}>3);
-      @d = sort map { encode('utf-8',$_) } @d;
+      @d = sort map { encode('utf-8',$_->{table_name}) } @d;
 
    } elsif(@p==1) {          
-      if($arg->{backend}eq'mysql') {
-         @d = sql("show columns from $p[0]");
-         @d = map { $_->{Field} } @d;
-      } else {
-         @d = sql("select * from information_schema.columns where table_name = ?",$p[0]);
-         @d = map { $_->{column_name} } @d;
-      }
-      @d = sort map { encode('utf-8',$_) } @d;
+      @d = sql("select distinct column_name from information_schema.columns where table_name = ?",$p[0]);
+      @d = sort map { encode('utf-8',$_->{column_name}) } @d;
       print to_json(\@d,{pretty=>1,canonical=>1}) if($arg->{verbose}>3);
-      #push(@d,sort keys %{$d[0]});
 
    } elsif(@p==2) {     # /<table>/<col>/<val>
       @d = sql("select distinct $p[1] from $p[0]");
-      #@d = sql("select distinct ? from ?",$p[1],$p[0]);    # -- would be safe ... but doesn't work ... (SQL sucks)
+      # @d = sql("select distinct ? from ?",$p[1],$p[0]);    # -- would be safe ... but doesn't work ... (SQL sucks)
       @d = sort map { encode('utf-8',$_->{$p[1]}) } @d;
       print to_json(\@d,{pretty=>1,canonical=>1}) if($arg->{verbose}>3);
 
