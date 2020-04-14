@@ -193,8 +193,9 @@ sub my_getattr {
       
    } elsif(@p==2) {           # /table/column/
       return ( -ENOENT() ) if($p[0]=~/^\.\w+/);
-      #my $c = sql("select $p[1] from $p[0] limit 1");
-      #return ( -ENOENT() ) if(!$c);
+      # my $c = sql("select $p[1] from $p[0] limit 1");
+      my $c = sql("select distinct column_name from information_schema.columns where table_name = ? and column_name = ?",$p[0],$p[1]);
+      return ( -ENOENT() ) if(!$c);
       
    } elsif(@p==3) {           # /table/column/value/<v>
       return ( -ENOENT() ) if($p[0]=~/^\.\w+/);
