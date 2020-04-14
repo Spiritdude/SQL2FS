@@ -149,7 +149,7 @@ sub my_read {
    } if(@p==4) {     # /<table>/<col>/<val>/<n>
       my $f; $f = $1 if($p[3]=~s/#(\w+)$//);   
       my(@c) = sql("select * from $p[0] where $p[1] = ? limit 1 offset $p[3]",$p[2]);   # -- .. offset ?",$p[3]*1) won't work with mysql, but works with pg
-      return 1 if(@c==0||!$c[0]);
+      return -1 if(@c==0||!$c[0]);
       my $e;
       if($f) {
          $e = encode('utf-8',$c[0]->{$f});
