@@ -1,8 +1,7 @@
 #!/usr/bin/perl
 
-# == SQL 2 Filesystem Abstraction == 
-#    written by Rene K. Mueller <spiritdude@gmail.com>
-#    aka "because fs everything"
+# == SQL 2 Filesystem Abstraction (FS Everything) ==
+#  written by Rene K. Mueller <spiritdude@gmail.com>
 #
 my $APPNAME = "SQL2FS (sql2fs)";
 my $VERSION = "0.0.3";

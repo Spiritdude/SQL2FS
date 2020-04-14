@@ -18,7 +18,7 @@ backup::
 	cd ..; tar cfvz ~/Backup/${NAME}-${VERSION}.tar.gz ${NAME}; scp ~/Backup/${NAME}-${VERSION}.tar.gz backup:Backup;
 
 edit::
-	dee4 sql2fs Makefile README.md
+	dee4 sql2fs Makefile README.md LICENSE
 
 git::
 	git remote add origin git@git:${NAME}
