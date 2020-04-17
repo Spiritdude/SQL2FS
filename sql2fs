@@ -73,6 +73,7 @@ if($arg->{help} || @ARGV!=1) {
       --backend=<db>       backend db type: ".join(", ",map { "'$_'" } sort keys %$ba2dbi)." (default: $arg->{backend})
       --version            print version and exit
       --allow_other        permit other users to use mount (add 'user_allow_other' in /etc/fuse.conf)
+      --hash_prefix=<p>    define hash prefix (default: $arg->{hash_prefix})
 
    examples:
       % sql2fs --backend=pg wikidata
