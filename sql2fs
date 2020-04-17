@@ -4,7 +4,7 @@
 #  written by Rene K. Mueller <spiritdude@gmail.com>
 #
 my $APPNAME = "SQL2FS (sql2fs)";
-my $VERSION = "0.0.4";
+my $VERSION = "0.0.5";
 #
 # License: MIT, Copyright 2020 by Rene K. Mueller (see LICENSE file)
 #
@@ -14,6 +14,7 @@ my $VERSION = "0.0.4";
 #     ls
 #
 # History:
+# 2020/04/17: 0.0.5: support large content fields, referencing by SHA256 hash reference; removing null entries
 # 2020/04/14: 0.0.4: adding sqlite support
 # 2020/04/13: 0.0.3: adding mysql support, better usage/help output
 # 2020/04/13: 0.0.2: allowing <table>/<col>/<val>#<col> solely, better utf-8 support
@@ -27,6 +28,7 @@ use Fuse;
 use POSIX qw(ENOENT EISDIR EINVAL O_WRONLY);
 use JSON;
 use Encode;
+use Digest::SHA 'sha256_hex';
 
 use strict;
 use utf8;
@@ -41,7 +43,8 @@ my $arg = {
    verbose => 0
 };
 
-my $dbh;
+my $dbh;                   # -- database handle
+my $item;                  # -- item/file metadata cache
 my $st_time = time();
 
 my @a;
@@ -143,6 +146,7 @@ sub my_read {
    my(@p) = split(/\//,$path);
    if(@p==3) {
       my $f; $f = $1 if($p[2]=~s/#(\w+)$//);
+      $p[2] = fromFilename($p[2]);
       my $c = sql("select * from $p[0] where $p[1] = ?",$p[2]);
       my $e;
       if($f) {
@@ -155,6 +159,7 @@ sub my_read {
 
    } if(@p==4) {     # /<table>/<col>/<val>/<n>
       my $f; $f = $1 if($p[3]=~s/#(\w+)$//);   
+      $p[2] = fromFilename($p[2]);
       my(@c) = sql("select * from $p[0] where $p[1] = ? limit 1 offset $p[3]",$p[2]);   # -- .. offset ?",$p[3]*1) won't work with mysql, but works with pg
       return -1 if(@c==0||!$c[0]);
       my $e;
@@ -182,7 +187,7 @@ sub my_getattr {
 
    my($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size, $atime, $mtime, $ctime, $blksize, $blocks); # = stat(".");
 
-   ($dev, $ino, $rdev, $blocks, $nlink, $blksize ) = ( 0, 0, 0, 1, 1, 1024 );
+   ($dev, $ino, $rdev, $blocks, $nlink, $blksize) = (0, 0, 0, 1, 1, 1024);
 
    my $context = Fuse::fuse_get_context();
    my $type = 0040;           # -- dir
@@ -219,6 +224,7 @@ sub my_getattr {
    } elsif(@p==3) {           # /table/column/value/<v>
       return ( -ENOENT() ) if($p[0]=~/^\.\w+/);
       my $f; $f = $1 if($p[2]=~s/#(\w+)$//);
+      $p[2] = fromFilename($p[2]);
       my(@c) = sql("select * from $p[0] where $p[1] = ?",$p[2]);
       return ( -ENOENT() ) if(@c==0);
       if(@c==1) {
@@ -252,7 +258,7 @@ sub my_getattr {
    print "type: $type\n" if($arg->{verbose}>2);
    $atime = time();
    $mtime = $ctime = $st_time;
-   $mode = ($type << 9) + $perm;
+   $mode = ($type << 9) | $perm;
    $uid = $context->{uid};
    $gid = $context->{gid};
    print "valid file: ",
@@ -271,7 +277,7 @@ sub my_getdir {
 
    my(@p) = split(/\//,$path);
 
-   if(@p==0) {     # /
+   if(@p==0) {     # / => /<table*>
       if($arg->{backend}eq'mysql') {
          # @d = sql("show tables");
          # @d = map { $_->{"Tables_in_".$arg->{db}} } @d;
@@ -280,13 +286,12 @@ sub my_getdir {
          @d = sql("select name as table_name from sqlite_master where type = 'table' and name not like 'sqlite_%'");
       } else {
          # @d = sql("select * from pg_catalog.pg_tables where schemaname != 'pg_catalog' and schemaname != 'information_schema'");
-         # @d = map { $_->{tablename} } @d;
          @d = sql("select table_name from information_schema.tables where table_schema != 'pg_catalog' and table_schema != 'information_schema'");
       }
       print to_json(\@d,{pretty=>1,canonical=>1}) if($arg->{verbose}>3);
       @d = sort map { encode('utf-8',$_->{table_name}) } @d;
 
-   } elsif(@p==1) {          
+   } elsif(@p==1) {     # /<table> => /<table>/<col*>
       if($arg->{backend}eq'sqlite') {
          my $c = sql("select sql from sqlite_master where type = 'table' and name = ?",$p[0]);
          if($c && $c->{sql} =~ /\(([^\)]+)\)/) {      # -- no other way than parsing output "create table (....)"
@@ -299,13 +304,18 @@ sub my_getdir {
       @d = sort map { encode('utf-8',$_->{column_name}) } @d;
       print to_json(\@d,{pretty=>1,canonical=>1}) if($arg->{verbose}>3);
 
-   } elsif(@p==2) {     # /<table>/<col>/<val>
+   } elsif(@p==2) {     # /<table>/<col> => /<table>/<col>/<val*>
       @d = sql("select distinct $p[1] from $p[0]");
       # @d = sql("select distinct ? from ?",$p[1],$p[0]);    # -- would be safe ... but doesn't work ... (SQL sucks)
-      @d = sort map { encode('utf-8',$_->{$p[1]}) } @d;
+      @d = grep { defined $_->{$p[1]} } @d;                  # -- remove null
+      if(0) {
+         @d = sort map { encode('utf-8',$_->{$p[1]}) } @d;
+      } else {          # future: handle large content (e.g. with binary or \n\r)
+         @d = sort map { encode('utf-8',toFilename($_->{$p[1]})) } @d; 
+      }
       print to_json(\@d,{pretty=>1,canonical=>1}) if($arg->{verbose}>3);
 
-   } elsif(@p==3) {     # /<table>/<col>/<val>/<id>
+   } elsif(@p==3) {     # /<table>/<col>/<val> => /<table>/<col>/<val>/<id*>
       @d = sql("select * from $p[0] where $p[1] = ?",$p[2]);
       my $n = 0;
       @d = map { $n++; } @d;
@@ -320,9 +330,7 @@ sub sql {
    my @a = @_;
    my $opts = ref(@a[$#a])eq'HASH'?pop(@a):{};
 
-   unless($dbh) {
-      $dbh = DBI->connect("dbi:$ba2dbi->{$arg->{backend}}:dbname=".$arg->{db});
-   }
+   $dbh = DBI->connect("dbi:$ba2dbi->{$arg->{backend}}:dbname=".$arg->{db}) unless($dbh);
 
    print "INF: sql \"$sql\" ".join(" ",map {"\"$_\""} @a)."\n" if($arg->{verbose}>1);
    my $sth = $dbh->prepare($sql);
@@ -345,5 +353,62 @@ sub sql {
    print "INF:   ".scalar @r." results, returning ".(wantarray ? "array":"scalar")."\n" if($arg->{verbose}>1);
    $sth->{finish};
    return wantarray ? @r : $r[0];
+}
+
+# -- toFilename: transform content into a valid UNIX filename
+#  - issues:
+#     - ideally all transformation should be reversible
+#     - truncate is non-reversible
+#     - how to determine if transformation was actually done?
+#        - keep track of it internally with a cache
+sub toFilename {
+   my($d) = @_;
+   my $d0 = $d;
+   my $sz;
+   my $alt;
+   
+   if(0) {
+      $alt++ if($d =~ s/\n/\\n/g);
+      $alt++ if($d =~ s/\r/\\r/g);
+      if($d =~ /[\x00-\x1f]/) {       # -- non-printable content?
+         $d =~ s/([\x00-\x1f])/sprintf("x%02x",ord($1))/eg;
+         $alt++;
+      }
+      if(length($d)>128) {            # -- we truncate, but . . . we need to know, our query needs to be truncated as well
+         $d = substr($d,0,126)."..";
+         $sz = length($d);
+         $alt++;
+         $item->{$d}->{size} = $sz;
+      }
+   } else {
+      if($d=~/[\x00-\x1f]/ || length($d)>128) {
+         $d = "x" . sha256_hex($d0);
+         $item->{$d}->{type} = 'sha256';
+         $item->{$d}->{content} = $d0;
+      }
+   }
+   return $d;
+}
+
+# -- fromFilename: transform from valid UNIX filename back to content
+#    - how to determine if transformation was actually done?
+#      - look up some cache to determine such
+sub fromFilename {
+   my($d) = @_;
+   my $d0 = $d;
+   my $alt;
+   if(0) {
+      if(0 && $d =~ /x[0-9a-fA-F]{2}/) {
+         $d =~ s/x([0-9a-fA-F]{2})/sprintf("%c",hex($1))/eg;
+         $alt++;
+      }
+      $alt++ if($d =~ s/\\n/\n/g);
+      $alt++ if($d =~ s/\\r/\r/g);
+   } else {
+      if($d=~/^x/ && $item->{$d}->{type} eq 'sha256') {
+         $d = $item->{$d}->{content};
+      }
+   }
+   return $d;
 }
 

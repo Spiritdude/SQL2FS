@@ -35,19 +35,35 @@ val1    val2    val3/   val4   val5    val6/
 }
 ```
 
+![SQL2FS Concept](images/sql2fs-example.png)
+
+## Support
+- Debian/Ubuntu 18.04/LTS
+- PostgreSQL
+- MySQL
+- SQLite
+
 ## Limitations
-- UNIX only: Debian/Ubuntu 18.04/LTS
 - highly experimental (unstable)
 - barely any sanity checkings (insecure, easy to tamper and alter database/tables/etc)
-- read only (see next "Todo / Ideas")
+- read only (see next "Todo, Ideas & Issues")
 
-## Todo / Ideas
+## Todo, Ideas & Issues
+- content which clashes with UNIX filename notion:
+  - large or long content
+  - \r \n or general non-printable content (e.g. binary)
 - proper "write" support:
   - create new tables, e.g. `echo "a int, comment varchar" > new_table/.schema`
   - insert data into tables, e.g. `echo 'a=2 comment="testing something"' >> new_table/.tail`
   - remove data, e.g. `rm table/a/1` => deletes records `where a = 1`
   - etc
-
+- deal with huge tables and query results (and long wait times):
+  - progressivly update, timeout query after 1s, and provide directory list
+    - display parts with extra file/dir "`more .../`" or so indicating it's not all yet
+  - keep cache
+  - provide additional fine-grained approach:
+    - split up files into more directories, e.g. "Another File.txt" -> "An/Another File.txt"
+  
 ## Download
 ```
 % git clone https://github.com/Spiritdude/SQL2FS
@@ -56,7 +72,7 @@ val1    val2    val3/   val4   val5    val6/
 
 ## Install
 
-On Debian/Ubuntu:
+On Debian/Ubuntu 18.04:
 ```
 % sudo make requirements
 % make install
@@ -65,14 +81,16 @@ Note: it just installs `sql2fs` to your local `~/bin/`.
 
 ## Use 
 ```
-% createdb test
 % psql test
-> create table table1 (a int, b int, c varchar);
-> insert into table1 (a,b,c) values(1,2,"test");
-> insert into table1 (a,b,c) values(2,13,"test2");
-> insert into table1 (a,b,c) values(2,3,"test3");
-> insert into table1 (a,b,c) values(3,4,"test4");
-> \q
+test# select * from table1;
+a | b  |   c
+--+----+--------
+1 |  2 | test
+2 | 13 | test2
+2 |  3 | test3
+3 |  4 | test4
+(4 rows)
+# \q
 
 % ./sql2fs test
 
@@ -90,7 +108,7 @@ a/     b/     c/
 
 % ls
 1      2/     3
-// note: some are files and some are directories
+// Note: some are files and some are directories
 
 % more 1
 {
@@ -99,14 +117,14 @@ a/     b/     c/
    "c": "test",
 }
 
-// note: once you reached record level, you can access the column with adding '#column' to the filename:
+// Note: once you reached record level, you can access the column with adding '#column' to the filename:
 % more 1#b
 2
 
 % more 1#c
 test
 
-// note: some values might not be unique, therefore you can 'cd' into them, and see entries like 0 1 2 ...
+// Note: some values might not be unique, therefore you can 'cd' into them, and see entries like 0 1 2 ...
 % cd 2/
 
 % ls 
