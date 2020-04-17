@@ -40,7 +40,8 @@ my $s2f = { v => 'verbose' };
 
 my $arg = {
    backend => "pg",
-   verbose => 0
+   verbose => 0,
+   hash_prefix => "x"
 };
 
 my $dbh;                   # -- database handle
@@ -382,7 +383,7 @@ sub toFilename {
       }
    } else {
       if($d=~/[\x00-\x1f]/ || length($d)>128) {
-         $d = "x" . sha256_hex($d0);
+         $d = $arg->{hash_prefix} . sha256_hex($d0);
          $item->{$d}->{type} = 'sha256';
          $item->{$d}->{content} = $d0;
       }
@@ -405,7 +406,7 @@ sub fromFilename {
       $alt++ if($d =~ s/\\n/\n/g);
       $alt++ if($d =~ s/\\r/\r/g);
    } else {
-      if($d=~/^x/ && $item->{$d}->{type} eq 'sha256') {
+      if(substr($d,0,1) eq $arg->{hash_prefix} && $item->{$d}->{type} eq 'sha256') {
          $d = $item->{$d}->{content};
       }
    }
