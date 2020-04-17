@@ -6,7 +6,7 @@ all::
 
 requirements::
 	sudo apt -y install libfuse-dev libpq-dev libdbd-mysql-perl libdbd-sqlite3-perl
-	sudo cpan Fuse JSON DBI DBD::Pg
+	sudo cpan Fuse JSON DBI DBD::Pg Digest::SHA
 
 install::
 	cp sql2fs ~/bin/
