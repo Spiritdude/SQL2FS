@@ -30,9 +30,9 @@ edit::
 	dee4 sql2fs Makefile README.md LICENSE
 
 git::
-	git remote add origin git@git:${NAME}
+	#git remote add origin git@git:${NAME}
 	#git remote add origin git@github.com:Spiritdude/${NAME}.git
-	#git remote set-url origin git@github.com:Spiritdude/${NAME}.git
+	git remote set-url origin git@github.com:Spiritdude/${NAME}.git
         
 change::
 	git commit -am "..."

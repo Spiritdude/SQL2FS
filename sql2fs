@@ -41,7 +41,8 @@ my $s2f = { v => 'verbose' };
 my $arg = {
    backend => "pg",
    verbose => 0,
-   hash_prefix => "x"
+   hash_prefix => "x",
+   content_max => 16*1024
 };
 
 my $dbh;                   # -- database handle
@@ -386,6 +387,7 @@ sub toFilename {
       if($d=~/[\x00-\x1f]/ || length($d)>128) {
          $d = $arg->{hash_prefix} . sha256_hex($d0);
          $item->{$d}->{type} = 'sha256';
+         $d0 = substr($d0,0,$arg->{content_max}) if(length($d0)>$arg->{content_max});
          $item->{$d}->{content} = $d0;
       }
    }
