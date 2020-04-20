@@ -21,6 +21,7 @@ column1/    column2/    ...
 
 % ls
 val1    val2    val3/   val4   val5    val6/ 
+
 % more val1
 {
    "column1": "val1",
