@@ -1,6 +1,6 @@
 # SQL2FS - Mapping SQL as a File System
 
-Mapping SQL (PostgreSQL, MariaDB, MySQL, SQLite) to a file system . . . because it's possible, and because it's how it should be done.
+Mapping SQL (PostgreSQL, MariaDB, MySQL, SQLite) to a file system . . . because it's possible, and because how it should be done - bridging datasets to different views.
 
 ![SQL2FS Concept](images/sql2fs-example.png)
 
