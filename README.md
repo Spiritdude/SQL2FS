@@ -1,6 +1,6 @@
 # SQL2FS - Mapping SQL as a File System
 
-Mapping SQL (PostgreSQL, MySQL, SQLite) to a file system . . . because it's possible, and because it's how it should be done.
+Mapping SQL (PostgreSQL, MariaDB, MySQL, SQLite) to a file system . . . because it's possible, and because it's how it should be done.
 
 ![SQL2FS Concept](images/sql2fs-example.png)
 
@@ -51,15 +51,16 @@ val1    val2    val3/   val4   val5    val6/
 ## Support
 - Debian/Ubuntu 18.04/LTS
 - PostgreSQL
+- MariaDB
 - MySQL
 - SQLite
 
 ## Limitations
 - highly experimental (unstable)
 - barely any sanity checkings (insecure, easy to tamper and alter database/tables/etc)
-- read only (see next "Todo, Ideas & Issues")
+- read only (see next "Todo")
 
-## Todo, Ideas & Issues
+## Todo
 - content which clashes with UNIX filename notion:
   - large or long content: partially resolved in 0.0.5
   - ~~\r \n or general non-printable content (e.g. binary)~~: resolved in 0.0.5
