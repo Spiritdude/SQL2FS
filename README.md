@@ -167,7 +167,6 @@ test4
 
 ## Exit & Unmount
 ```
-% killall sql2fs
 % sudo umount test/
 ```
 

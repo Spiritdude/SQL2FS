@@ -111,6 +111,7 @@ die "$APPNAME: $!\n" unless(-d $mount);
 fork && exit;
 
 $SIG{__DIE__} = sub {
+   print "$APPNAME: exited.\n";
    print "$APPNAME: HINT: sudo umount $mount/\n";
    exit -1;
 };
