@@ -61,8 +61,8 @@ val1    val2    val3/   val4   val5    val6/
 
 ## Todo, Ideas & Issues
 - content which clashes with UNIX filename notion:
-  - large or long content
-  - ~~\r \n or general non-printable content (e.g. binary)~~: partially resolved in 0.0.5
+  - large or long content: partially resolved in 0.0.5
+  - ~~\r \n or general non-printable content (e.g. binary)~~: resolved in 0.0.5
 - proper "write" support:
   - create new tables, e.g. `echo "a int, comment varchar" > new_table/.schema`
   - insert data into tables, e.g. `echo 'a=2 comment="testing something"' >> new_table/.tail`
