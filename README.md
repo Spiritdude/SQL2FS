@@ -1,15 +1,24 @@
 # SQL2FS - Mapping SQL as a File System
 
 Mapping SQL (PostgreSQL, MySQL, SQLite) to a file system . . . because it's possible, and because it's how it should be done.
+
+![SQL2FS Concept](images/sql2fs-example.png)
+
 ```
 % sql2fs --backend=mysql my_database
+
 % cd my_database/
+
 % ls
 table1/     table2/     table3/
+
 % cd table1/
+
 % ls
 column1/    column2/    ...
+
 % cd column1/
+
 % ls
 val1    val2    val3/   val4   val5    val6/ 
 % more val1
@@ -18,15 +27,19 @@ val1    val2    val3/   val4   val5    val6/
    "column2": "some value",
    ...
 }
+
 % cd val3/
+
 % ls
 0   1   2   3 
+
 % more 0
 {
    "column1": "val3",
    "column2": "some other value",
    ...
 }
+
 % more 1
 {
    "column1": "val3",
@@ -34,8 +47,6 @@ val1    val2    val3/   val4   val5    val6/
    ...
 }
 ```
-
-![SQL2FS Concept](images/sql2fs-example.png)
 
 ## Support
 - Debian/Ubuntu 18.04/LTS
@@ -51,7 +62,7 @@ val1    val2    val3/   val4   val5    val6/
 ## Todo, Ideas & Issues
 - content which clashes with UNIX filename notion:
   - large or long content
-  - \r \n or general non-printable content (e.g. binary)
+  - ~~\r \n or general non-printable content (e.g. binary)~~: partially resolved in 0.0.5
 - proper "write" support:
   - create new tables, e.g. `echo "a int, comment varchar" > new_table/.schema`
   - insert data into tables, e.g. `echo 'a=2 comment="testing something"' >> new_table/.tail`
