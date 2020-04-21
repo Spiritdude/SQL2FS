@@ -34,6 +34,11 @@ use strict;
 use utf8;
 use open qw(:std :utf8);
 
+use constant {
+    T_FILE => 0100,
+    T_DIR => 0040
+};
+
 my $ba2dbi = { pg => "Pg", mysql => "mysql", sqlite => "SQLite" };
 
 my $s2f = { v => 'verbose' };
@@ -74,6 +79,7 @@ if($arg->{help} || @ARGV!=1) {
       --backend=<db>       backend db type: ".join(", ",map { "'$_'" } sort keys %$ba2dbi)." (default: $arg->{backend})
       --version            print version and exit
       --allow_other        permit other users to use mount (add 'user_allow_other' in /etc/fuse.conf)
+      --mount=<dir>        enforce certain mount point
       --hash_prefix=<p>    define hash prefix (default: $arg->{hash_prefix})
 
    examples:
@@ -104,9 +110,11 @@ my $mount = $arg->{db} = shift(@ARGV);    # -- database becomes mount point
 
 $mount =~ s/.+\///, $mount =~ s/\.\w+$// if($arg->{backend}eq'sqlite');    # -- remove path and extension if sqlite (e.g. /../../test.db)
 
+$mount = $arg->{mount} if(defined $arg->{mount});
+
 mkdir $mount;
 
-die "$APPNAME: $!\n" unless(-d $mount);
+die "$APPNAME: mount point '$mount' doesn't exist: $!\n" unless(-d $mount);
 
 fork && exit;
 
@@ -194,7 +202,7 @@ sub my_getattr {
    ($dev, $ino, $rdev, $blocks, $nlink, $blksize) = (0, 0, 0, 1, 1, 1024);
 
    my $context = Fuse::fuse_get_context();
-   my $type = 0040;           # -- dir
+   my $type = T_DIR;
    my $perm = 0777;
    $size = 0;
 
@@ -239,7 +247,7 @@ sub my_getattr {
             $e = encode('utf-8',to_json($c[0],{pretty=>1,canonical=>1}));
          }
          $size = length($e);
-         $type = 0100;           # -- file
+         $type = T_FILE;
       } else {
          ;                       # -- more values (dir)
       }
@@ -256,7 +264,7 @@ sub my_getattr {
          $e = encode('utf-8',to_json($c[0],{pretty=>1,canonical=>1}));
       }
       $size = length($e);
-      $type = 0100;           # -- file
+      $type = T_FILE;
    }
 
    print "type: $type\n" if($arg->{verbose}>2);
