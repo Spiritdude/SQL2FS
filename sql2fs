@@ -1,12 +1,12 @@
 #!/usr/bin/perl
 
 # == SQL 2 Filesystem Abstraction (FS Everything) ==
-#  written by Rene K. Mueller <spiritdude@gmail.com>
+#    written by Rene K. Mueller <spiritdude@gmail.com>
 #
 my $APPNAME = "SQL2FS (sql2fs)";
 my $VERSION = "0.0.5";
 #
-# License: MIT, Copyright 2020 by Rene K. Mueller (see LICENSE file)
+# License: MIT (see LICENSE file)
 #
 # Description:
 #     ./sql2fs <dbname>
