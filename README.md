@@ -5,7 +5,8 @@ Mapping SQL (PostgreSQL, MariaDB, MySQL, SQLite) to a file system . . . because 
 ![SQL2FS Concept](images/sql2fs-example.png)
 
 ```
-% sql2fs --backend=mysql my_database
+% sql2fs --backend=mysql my_database  -or-
+% sql2fs mysql://my_database
 
 % cd my_database/
 
@@ -105,7 +106,7 @@ a | b  |   c
 (4 rows)
 # \q
 
-% ./sql2fs test
+% ./sql2fs pg://test
 
 % cd test/
 

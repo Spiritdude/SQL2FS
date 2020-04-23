@@ -4,7 +4,7 @@
 #    written by Rene K. Mueller <spiritdude@gmail.com>
 #
 my $APPNAME = "SQL2FS (sql2fs)";
-my $VERSION = "0.0.5";
+my $VERSION = "0.0.6";
 #
 # License: MIT (see LICENSE file)
 #
@@ -14,6 +14,7 @@ my $VERSION = "0.0.5";
 #     ls
 #
 # History:
+# 2020/04/23: 0.0.6: adopting URI-like db referencing, e.g. pg://test or sqlite://test.db
 # 2020/04/17: 0.0.5: support large content fields, referencing by SHA256 hash reference; removing null entries
 # 2020/04/14: 0.0.4: adding sqlite support
 # 2020/04/13: 0.0.3: adding mysql support, better usage/help output
@@ -66,6 +67,8 @@ foreach(@ARGV) {
 }
 @ARGV = @a;
 
+$arg->{backend} = $1 if($ARGV[0]=~s/^(\w+):\/\///);    # -- URI-like, let's extract backend
+
 if(!defined $ba2dbi->{$arg->{backend}}) {
    print "$APPNAME: ERR: backend '$arg->{backend}' not supported, only ".join(", ",map { "'$_'" } sort keys %$ba2dbi)."\n";
    exit -1;
@@ -77,22 +80,23 @@ if($arg->{help} || @ARGV!=1) {
       --verbose            increase verbosity
         -v or -vvvv           \"       \"
       --backend=<db>       backend db type: ".join(", ",map { "'$_'" } sort keys %$ba2dbi)." (default: $arg->{backend})
+                           alternatively use <backend>://<database>, e.g. sqlite://test.db or mysql://test
       --version            print version and exit
       --allow_other        permit other users to use mount (add 'user_allow_other' in /etc/fuse.conf)
       --mount=<dir>        enforce certain mount point
       --hash_prefix=<p>    define hash prefix (default: $arg->{hash_prefix})
 
    examples:
-      % sql2fs --backend=pg wikidata
+      % sql2fs pg://wikidata
       % cd wikidata/
       % ls 
       
-      % sql2fs --backend=mysql wordpress
+      % sql2fs mysql://wordpress
       % cd wordpress/
       % ls
       % cd ..; killall sql2fs; sudo umount wordpress/
       
-      % sql2fs --backend=sqlite test.db
+      % sql2fs sqlite://test.db
       % cd test/
 
    see also https://github.com/Spiritdude/SQL2FS for more information
